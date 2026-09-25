@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncGenerator
 
 from dotenv import load_dotenv
@@ -25,14 +26,26 @@ load_dotenv()
 
 web = FastAPI(title="AI 导购智能体")
 
+# 访问口令：来自环境变量 DEMO_PASS，默认 "demo123"（部署时务必修改）
+ACCESS_PASS = os.getenv("DEMO_PASS", "demo123")
+
 
 class ChatRequest(BaseModel):
     message: str
 
 
+class UnlockRequest(BaseModel):
+    passwd: str = ""
+
+
 @web.get("/")
 async def index():
     return FileResponse("index.html")
+
+
+@web.post("/api/unlock")
+async def unlock(req: UnlockRequest):
+    return {"ok": req.passwd == ACCESS_PASS}
 
 
 @web.post("/api/chat")

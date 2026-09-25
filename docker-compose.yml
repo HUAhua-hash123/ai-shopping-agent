@@ -1,0 +1,12 @@
+services:
+  ai-shopping-agent:
+    build: .
+    container_name: ai-shopping-agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 你的 API Key（DeepSeek 或 OpenAI 等）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # 访问口令（前端进入对话前需要输入）
+      - DEMO_PASS=${DEMO_PASS:-demo123}

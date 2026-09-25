@@ -86,6 +86,30 @@
     #send:disabled { opacity: 0.5; cursor: not-allowed; }
     .dot { display:inline-block; animation: blink 1s infinite; }
     @keyframes blink { 0%,100%{opacity:0.2} 50%{opacity:1} }
+    /* 口令遮罩 */
+    #gate {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .gate-card {
+      background: var(--card); border: 1px solid var(--edge);
+      border-radius: 16px; padding: 32px; max-width: 360px; width: 90%;
+      text-align: center;
+    }
+    .gate-card h2 { margin: 0 0 8px; font-size: 20px; }
+    .gate-card p { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+    #passInput {
+      width: 100%; border: 1px solid var(--edge); border-radius: 10px;
+      padding: 12px 14px; font-size: 15px; margin-bottom: 12px; outline: none;
+    }
+    #passInput:focus { border-color: var(--amber); }
+    #unlockBtn {
+      width: 100%; border: none; background: var(--amber); color: #fff;
+      border-radius: 10px; padding: 12px; font-size: 15px; cursor: pointer;
+    }
+    #unlockBtn:hover { background: var(--amber-dark); }
+    .err { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 10px; }
+    #chat.hidden, #inputArea.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -96,7 +120,18 @@
 
   <div id="chat"></div>
 
-  <div id="inputArea">
+  <!-- 访问口令遮罩：校验通过才显示聊天区 -->
+  <div id="gate">
+    <div class="gate-card">
+      <h2>🔒 需要口令</h2>
+      <p>这是一个个人 Demo，请输入访问口令开始对话。</p>
+      <input id="passInput" type="password" placeholder="访问口令" />
+      <button id="unlockBtn">进入</button>
+      <p id="gateErr" class="err"></p>
+    </div>
+  </div>
+
+  <div id="inputArea" class="hidden">
     <textarea id="input" rows="1" placeholder="试试：我想买一副 500 元以内的耳机"></textarea>
     <button id="send">发送</button>
   </div>
@@ -105,6 +140,42 @@
     const chat = document.getElementById('chat')
     const input = document.getElementById('input')
     const sendBtn = document.getElementById('send')
+
+    chat.classList.add('hidden')
+
+    // 口令验证
+    const gate = document.getElementById('gate')
+    const passInput = document.getElementById('passInput')
+    const unlockBtn = document.getElementById('unlockBtn')
+    const gateErr = document.getElementById('gateErr')
+
+    async function unlock() {
+      const pass = passInput.value.trim()
+      if (!pass) return
+      try {
+        const res = await fetch('/api/unlock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passwd: pass }),
+        })
+        const data = await res.json()
+        if (data.ok) {
+          gate.style.display = 'none'
+          chat.classList.remove('hidden')
+          document.getElementById('inputArea').classList.remove('hidden')
+          input.focus()
+        } else {
+          gateErr.textContent = '口令错误'
+        }
+      } catch (e) {
+        gateErr.textContent = '网络错误，请重试'
+      }
+    }
+
+    unlockBtn.addEventListener('click', unlock)
+    passInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') unlock()
+    })
 
     function addMessage(role, text) {
       const div = document.createElement('div')
