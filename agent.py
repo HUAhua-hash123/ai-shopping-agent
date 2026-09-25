@@ -107,6 +107,11 @@ def make_llm() -> ChatOpenAI:
         api_key = os.getenv("ZHIPU_API_KEY")
         base_url = base_url or "https://open.bigmodel.cn/api/paas/v4"
         model = model or "glm-4-flash"
+    # 回退到阿里百炼（DashScope，OpenAI 兼容模式）
+    if not api_key and os.getenv("DASHSCOPE_API_KEY"):
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        base_url = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        model = model or "qwen-turbo"
 
     if not model:
         model = "gpt-4o-mini"
