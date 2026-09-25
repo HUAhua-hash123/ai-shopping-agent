@@ -88,10 +88,28 @@ class AgentState(TypedDict):
 
 
 def make_llm() -> ChatOpenAI:
-    """创建绑定了工具的 LLM。"""
+    """创建绑定了工具的 LLM。
+
+    优先读标准变量 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL；
+    若都没有，则自动回退到常见国内平台的 Key（DeepSeek、智谱）。
+    """
     api_key = os.getenv("OPENAI_API_KEY")
     base_url = os.getenv("OPENAI_BASE_URL")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.getenv("OPENAI_MODEL")
+
+    # 回退到 DeepSeek
+    if not api_key and os.getenv("DEEPSEEK_API_KEY"):
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = base_url or "https://api.deepseek.com/v1"
+        model = model or "deepseek-chat"
+    # 回退到智谱
+    if not api_key and os.getenv("ZHIPU_API_KEY"):
+        api_key = os.getenv("ZHIPU_API_KEY")
+        base_url = base_url or "https://open.bigmodel.cn/api/paas/v4"
+        model = model or "glm-4-flash"
+
+    if not model:
+        model = "gpt-4o-mini"
 
     kwargs = {"model": model, "temperature": 0.2}
     if api_key:

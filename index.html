@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 导购智能体 · Demo</title>
+  <style>
+    :root {
+      --bg: #faf6ef;
+      --card: #fffdf8;
+      --edge: #e7ddcc;
+      --amber: #f59e0b;
+      --amber-dark: #d97706;
+      --ink: #1e293b;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--edge);
+      text-align: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.05em;
+    }
+    header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+    #chat {
+      flex: 1;
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg { max-width: 85%; padding: 12px 16px; border-radius: 14px; line-height: 1.6; font-size: 15px; white-space: pre-wrap; }
+    .msg.user { align-self: flex-end; background: var(--amber); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.agent { align-self: flex-start; background: var(--card); border: 1px solid var(--edge); border-bottom-left-radius: 4px; }
+    .msg.step { align-self: flex-start; background: transparent; color: var(--muted); font-size: 13px; padding: 2px 4px; }
+    .msg.step .tool { color: var(--amber-dark); font-family: ui-monospace, monospace; }
+    #inputArea {
+      border-top: 1px solid var(--edge);
+      padding: 14px 20px;
+      display: flex;
+      gap: 10px;
+      max-width: 760px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    #input {
+      flex: 1;
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-family: inherit;
+      background: #fff;
+      resize: none;
+      outline: none;
+    }
+    #input:focus { border-color: var(--amber); }
+    #send {
+      border: none;
+      background: var(--amber);
+      color: #fff;
+      border-radius: 10px;
+      padding: 0 20px;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #send:hover { background: var(--amber-dark); }
+    #send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dot { display:inline-block; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:0.2} 50%{opacity:1} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI 导购智能体</h1>
+    <p>LangGraph 编排 · 工具调用 · 流式交互（Demo）</p>
+  </header>
+
+  <div id="chat"></div>
+
+  <div id="inputArea">
+    <textarea id="input" rows="1" placeholder="试试：我想买一副 500 元以内的耳机"></textarea>
+    <button id="send">发送</button>
+  </div>
+
+  <script>
+    const chat = document.getElementById('chat')
+    const input = document.getElementById('input')
+    const sendBtn = document.getElementById('send')
+
+    function addMessage(role, text) {
+      const div = document.createElement('div')
+      div.className = 'msg ' + role
+      div.textContent = text
+      chat.appendChild(div)
+      chat.scrollTop = chat.scrollHeight
+      return div
+    }
+
+    function addStep(text) {
+      const div = document.createElement('div')
+      div.className = 'msg step'
+      div.innerHTML = text
+      chat.appendChild(div)
+      chat.scrollTop = chat.scrollHeight
+      return div
+    }
+
+    async function send() {
+      const text = input.value.trim()
+      if (!text) return
+      input.value = ''
+      addMessage('user', text)
+      sendBtn.disabled = true
+
+      // 占位的气泡，用于流式填充回答
+      let answerEl = null
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+        })
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status)
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+
+          let idx
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const chunk = buffer.slice(0, idx)
+            buffer = buffer.slice(idx + 2)
+            if (!chunk.startsWith('data:')) continue
+            const data = chunk.slice(5).trim()
+            if (data === '[DONE]') continue
+
+            let payload
+            try { payload = JSON.parse(data) } catch { continue }
+
+            if (payload.type === 'tool_call') {
+              addStep('⚙️ 调用工具 <span class="tool">' + payload.name + '(' + JSON.stringify(payload.args) + ')</span>')
+            } else if (payload.type === 'tool_result') {
+              addStep('📦 工具返回：' + payload.content.slice(0, 80))
+            } else if (payload.type === 'answer') {
+              if (!answerEl) answerEl = addMessage('agent', '')
+              answerEl.textContent += payload.content
+              chat.scrollTop = chat.scrollHeight
+            }
+          }
+        }
+      } catch (e) {
+        if (!answerEl) answerEl = addMessage('agent', '出错了：' + e.message)
+        else answerEl.textContent += '\n[出错：' + e.message + ']'
+      } finally {
+        sendBtn.disabled = false
+        input.focus()
+      }
+    }
+
+    sendBtn.addEventListener('click', send)
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        send()
+      }
+    })
+  </script>
+</body>
+</html>
